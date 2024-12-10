@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 
 def TGI(n1,n2):
     numbers = [n1]
@@ -9,6 +10,12 @@ def TGI(n1,n2):
     
     return numbers
 
+def Qprod(uno, otro):
+    if uno.val == otro.val:
+        return 1
+    else:
+        return 0
+
 class Laguerre:
     def __init__(self,p):
         pass #L_p(x)=e^x (d^p)/(dx^p)*(e^(-x)*x^p)
@@ -17,37 +24,82 @@ class Asolaguerre:#Tambien se puede usar sum(s=0 to p)[(-1)^s * x^s((p+k)!)^2/((
     def __init__(self):#en particular: L_p^k=L_p y L_0^k=k!
         pass #L_p^k(x) = -1^k (d^k)/(dx^k)*L_p+k(x)
 
+class HVec:#Aqui estoy definiendo bien los kets con su producto pertinente!!!!!!
+    def __init__(self, v):
+        self.v = v
+        self.n = v[0]
+        self.n = v[1]
+        self.m = v[2]
+        if len(v) == 5:
+            self.s = v[3]
+            self.ms = v[4]
+        else:
+            pass
+
+        def __mul__(self, other):
+            if isinstance(other, HVec):
+                if self.v == other.v:
+                    return 1
+                else:
+                    return 0
+            
+            else:
+                return 'Error en HVec __mul__'
+
 class Bra:
-    def __init__(self, el):
-        super().__init__()
-        self.val = np.array(el, dtype=complex)
+    def __init__(self, etiqueta, vec):
+        self.etiqueta = etiqueta
+        self.vec = vec
+
+    def __add__(self, other):
+        if isinstance(other, Bra):
+            return (self.vec+other.vec)
+        else:
+            return 'error en bra suma'
 
     def __str__(self):
-        return f"<{self.val}|"
+        ch =f"<"
+        for i,v in enumerate(self.etiqueta):
+            if i == 0:
+                ch += f"{v}"
+            else:
+                ch += f",{v}"
+        return f"{ch}|"
     
     def __mul__(self,other):
         if isinstance(other, Ket):
-            return np.dot(self.val, other.val)
+            return np.dot(self.vec, other.vec)
         elif isinstance(other, Operator):
             return Bra(np.dot(other.M, self.val))
         else:
             print('error producto bra')
     
-    def compl_conj(self):#falta añadir que sea el conjugado xD
-        return Ket(list(self.val.conj()))
+    def to_ket(self):
+        return(Ket(self.etiqueta, self.vec))
 
 class Ket:
-    def __init__(self, el):
-        super().__init__()
-        self.val = np.zeros(shape=[len(el),1], dtype=complex)
-        self.val[:,0] = el
+    def __init__(self, etiqueta, vec):
+        self.etiqueta = etiqueta
+        self.vec = vec
+
+    def __add__(self,other):
+        if isinstance(other, Ket):
+            return(self.vec+other.vec)
+        else:
+            return 'error in ket suma'
 
     def __str__(self):
-        return f"|{self.val.T[0]}>"
-
-    def compl_conj(self):#falta añadir que sea el conjugado xD
-        return Bra(list(self.val.conj().T[0]))
+        ch =f"|"
+        for i,v in enumerate(self.etiqueta):
+            if i == 0:
+                ch += f"{v}"
+            else:
+                ch += f",{v}"
+        return f"{ch}>"
     
+    def to_bra(self):
+        return Bra(self.etiqueta, self.vec)
+
     def diad_prod(self, otroket):#toma un conjunto n de numeros y los añade al ket
         pass
 
@@ -57,7 +109,7 @@ class Operator:
 
     def __mul__(self, other):
         if isinstance(other, Ket):
-            return Ket(np.dot(self.M, other.val))
+            return Ket(np.dot(self.M, other.val))#Hay que cambiar esto porque los kets y bras ahora son mas fumada (ver HVec)
 
         else:
             print('Error en producto operador')
@@ -77,71 +129,71 @@ class Atom:
         self.q = Z
         self.n = N
 
-class N:
-    def __init__(self, n=1):
-        self.n = n
-
-    def __str__(self):
-        return(self.val)
-
-class L:
-    def __init__(self, Qn=1, val = 0):
-        self.MAX = Qn-1
-        self.rang = TGI(0,self.MAX)
-        if val in self.rang:
-            self.val = val
-        else:
-            self.val = 0
-
-    def __str__(self):
-        return(self.val)
-
-class S:
-    def __init__(self, val=1/2):
-        self.val = val
-
-    def __str__(self):
-        return(self.val)
-
-class M:
-    def __init__(self, MAX=0, val = 0):
-        self.MAX = MAX
-        self.rang = TGI(-MAX,MAX)
-        if val in self.rang:
-            self.val = val
-        else:
-            self.val = 0
-
-    def __str__(self):
-        return(self.val)
-
 class OrtBass:
-    def __init__(self, basis): #Yo quiero darle algo tipo [a,b,c] y que me instancie los kets
-        self.basis = []
-        for i in range(len(basis)):
-            vec = list(np.zeros(len(basis)))
-            vec[i] = 1
-            self.basis.append(Ket(vec))
+    def __init__(self, n=[1], l=[], ml=[], s=[], ms=[]): #Yo quiero darle los números cuánticos y tener todos los posibles estados sin tener en cuenta restricciones
+        self.base = [] #lista de kets de la base
+        self.n = n
+        if len(l) == 0:
+            self.l = TGI(0,n[0]-1)
+        else:
+            self.l = l
+        if len(ml) == 0:
+            self.ml = TGI(-max(self.l),max(self.l))
+        else:
+            self.ml = ml
+        auxiliar = list(itertools.product(*[self.n, self.l, self.ml]))
+        base = [comb for comb in auxiliar if comb[1]>=abs(comb[2]) and comb[0]==self.n[0]] #etiquetas de números
+        base_vecs = [np.zeros(len(base)) for _ in base] #arrays tipo [1,0,0]
+        for i,b in enumerate(base_vecs):
+            b[i] = 1
+
+        for etiqueta,vec in zip(base,base_vecs):
+            self.base.append(Ket(etiqueta,vec))
 
     def __str__(self):
-        return str([str(v) for v in self.basis])
-
-
-class State:
-    def __init__(self, basis, coefs):
-        self.basis = basis
-        self.ket = Ket(coefs)
-        self.Proyectors = [Operator((np.outer(ket.val, ket.val.T))) for ket in self.basis]
-
-    def __str__(self):
-        letras = ['a', 'b', 'c', 'd', 'e', 'f']
         ch = ''
-        for i in range(len(self.basis)):
-            if i == 0:
-                ch = f'{self.ket.val[i,0]}|a> '
-            else:
-                ch += f"+ {self.ket.val[i,0]}|{letras[i]}> "
+        for k in self.base:
+            ch += f"{k}\n"
         return ch
+
+class State: #Creo que hay que darle una vuelta a esta o la clase Ket para unificarlas y reducir espacio (además de que por definicion un estado es un ket)
+    def __init__(self, basis, coefs=None):
+        self.basis = basis
+        if coefs == None:
+            self.coefs = np.ones(len(basis.base))
+        else: 
+            self.coefs = coefs
+        self.nicks = False
+        self.Proyectors = [Operator((np.outer(ket.vec, ket.to_bra().vec))) for ket in self.basis.base]
+
+    def __str__(self):
+        if self.nicks:
+            letras = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u']
+            ch = ''
+            for i in range(len(self.basis.base)):
+                if i == 0:
+                    ch = f'{self.coefs[i]}|a> '
+                else:
+                    ch += f"+ {self.coefs[i]}|{letras[i]}> "
+            return ch
+        else:
+            ch = ''
+            for i,k in enumerate(self.basis.base):
+                if i == 0:
+                    ch += f'{self.coefs[i]}{k} '
+                else:
+                    ch += f"+ {self.coefs[i]}{k} "
+            return ch
+
+    def Slater_Det(self):
+        pass
+
+
 
 #Yo quiero darle a State los números cuanticos y que lo haga todo, cómo?
 
+base = OrtBass([2]) #Creamos una base de vectores para lo números cuánticos dados (los especificados se mantienen fijos, los que no se tomarán todos los valores válidos)
+print(base)
+estado = State(base)
+estado.nicks = True
+print(estado)
