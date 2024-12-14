@@ -76,43 +76,6 @@ class Bra:
     def to_ket(self):
         return(Ket(self.etiqueta, self.vec))
 
-class Ket:
-    def __init__(self, etiqueta, vec):
-        self.etiqueta = np.array(etiqueta)
-        self.vec = vec
-        self.showing = [True for _ in self.etiqueta]
-
-    def __add__(self,other):
-        if isinstance(other, Ket):
-            return(self.vec+other.vec)
-        else:
-            return 'error in ket suma'
-
-    def __str__(self):
-        ch =f"|"
-        visibletiquets = [e for i,e in enumerate(self.etiqueta) if self.showing[i]]            
-        for i,v in enumerate(visibletiquets):
-            if i == 0:
-                ch += f"{v}"
-            else:
-                ch += f",{v}"
-        return f"{ch}>"
-    
-    def to_bra(self):
-        return Bra(self.etiqueta, self.vec)
-
-    def __mull__(self,other):
-        if isinstance(other, float) or isinstance(other,int):
-            return self.vec*other
-
-    def actualizar_ket(self, etiqueta, vec):
-        return Ket(etiqueta,vec)
-
-    def diad_prod(self, other):#Devuelve unos kets cuyo .vec no esta definido
-        if isinstance(other, Ket):
-            new_etiqueta = self.etiqueta+other.etiqueta
-            return Ket(new_etiqueta,None)
-
 class Orbital:
     def __init__(self, n, l, occ_num):
         self.n = n
@@ -153,13 +116,20 @@ class Atom:
 
         return(orbs_numbers)
     
-    def get_open_nums(self):
-        n = list(set([o.n for o in self.open_orbs]))
-        l = list(set([o.l for o in self.open_orbs]))
+    def get_orbs_nums(self, orbitals):
+        n = list(set([o.n for o in orbitals]))
+        l = list(set([o.l for o in orbitals]))
         return(n,l)
-    
-    def get_base(self,spin=False):#Para estudiar los electrones de las capas abiertas
-        n,l = self.get_open_nums()
+
+    def get_base(self,spin=False):
+        n,l = self.get_orbs_nums(self.orbitals)
+        if not spin:
+            return OrtBass(n,l)
+        if spin:
+            return OrtBass(n,l,s=[0.5])
+
+    def get_open_base(self,spin=False):#Para estudiar los electrones de las capas abiertas
+        n,l = self.get_orbs_nums(self.open_orbs)
         if not spin:
             return OrtBass(n,l)
         if spin:
@@ -207,35 +177,6 @@ class OrtBass:
             ch += f"{k}\n"
         return ch
 
-class State: #Creo que hay que darle una vuelta a esta o la clase Ket para unificarlas y reducir espacio (además de que por definicion un estado es un ket)
-    def __init__(self, basis, coefs=None):
-        self.basis = basis
-        if coefs == None:
-            self.coefs = np.ones(len(basis.base))
-        else: 
-            self.coefs = coefs
-        self.nicks = False
-        self.Proyectors = [Operator((np.outer(ket.vec, ket.to_bra().vec))) for ket in self.basis.base]
-
-    def __str__(self):
-        if self.nicks:
-            letras = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u']
-            ch = ''
-            for i in range(len(self.basis.base)):
-                if i == 0:
-                    ch = f'{self.coefs[i]}|a> '
-                else:
-                    ch += f"+ {self.coefs[i]}|{letras[i]}> "
-            return ch
-        else:
-            ch = ''
-            for i,k in enumerate(self.basis.base):
-                if i == 0:
-                    ch += f'{self.coefs[i]}{k} '
-                else:
-                    ch += f"+ {self.coefs[i]}{k} "
-            return ch
-
     def Slater_Det(self):
         combs = []
         for k1 in self.basis.base:
@@ -245,6 +186,12 @@ class State: #Creo que hay que darle una vuelta a esta o la clase Ket para unifi
         combs_posibles = list(set([c for c in combs if not Pauli_exclusion(c)]))
 
         return combs_posibles
+
+def Pauli_exclusion(ket):#esto es un ket de 10 numeros (los dos electrones)
+    if ket.etiqueta[0]==ket.etiqueta[5] and ket.etiqueta[1]==ket.etiqueta[6] and ket.etiqueta[2]==ket.etiqueta[7] and ket.etiqueta[4]==ket.etiqueta[9]:
+        return True
+    else:
+        return False
 
 class Operator:
     def __init__(self, transformation, base, M=None, fun=None):
@@ -258,7 +205,7 @@ class Operator:
 
     def __mul__(self, other):
         if isinstance(other, Ket):
-            return Ket(other.etiqueta+self.t,np.dot(self.M, other.vec))
+            return Ket(other.etiqueta+self.t,np.dot(self.M, other.vec),showing=other.showing)
 
         else:
             print('Error en producto operador')
@@ -279,16 +226,89 @@ class Operator:
             M.append(fila)
         return np.array(M)
 
-def Pauli_exclusion(ket):#esto es un ket de 10 numeros (los dos electrones)
-    if ket.etiqueta[0]==ket.etiqueta[5] and ket.etiqueta[1]==ket.etiqueta[6] and ket.etiqueta[2]==ket.etiqueta[7] and ket.etiqueta[4]==ket.etiqueta[9]:
-        return True
-    else:
-        return False
+class Ket:
+    def __init__(self, etiqueta, vec, showing=None):
+        self.etiqueta = np.array(etiqueta)
+        self.vec = vec
+        if showing == None:
+            self.showing = [True for _ in self.etiqueta]
+        else:
+            self.showing = showing
 
+    def __add__(self,other):
+        if isinstance(other, Ket):
+            return(self.vec+other.vec)
+        else:
+            return 'error in ket suma'
 
+    def __str__(self):
+        #ch =f"{float(np.sum(self.vec**2))}|"
+        ch ="|"
+        visibletiquets = [e for i,e in enumerate(self.etiqueta) if self.showing[i]]          
+        for i,v in enumerate(visibletiquets):
+            if i == 0:
+                ch += f"{v}"
+            else:
+                ch += f",{v}"
+        return f"{ch}>"
+    
+    def to_bra(self):
+        return Bra(self.etiqueta, self.vec)
+
+    def __mull__(self,other):
+        if isinstance(other, float) or isinstance(other,int):
+            return self.vec*other
+
+    def actualizar_ket(self, etiqueta, vec):
+        return Ket(etiqueta,vec)
+
+    def diad_prod(self, other):#Devuelve unos kets cuyo .vec no esta definido
+        if isinstance(other, Ket):
+            new_etiqueta = self.etiqueta+other.etiqueta
+            return Ket(new_etiqueta,None)
+
+class State: #Creo que hay que darle una vuelta a esta o la clase Ket para unificarlas y reducir espacio (además de que por definicion un estado es un ket)
+    def __init__(self, basis, coefs=None):
+        self.basis = basis
+        if coefs == None:
+            self.vec_coefs = np.ones(len(basis.base))/np.sqrt(len(basis.base))#Esto debería hacer que todos fueran equiprobables y con suma=1
+        else: 
+            self.vec_coefs = coefs
+        self.nicks = False
+        self.Proyectors = [Operator((np.outer(ket.vec, ket.to_bra().vec))) for ket in self.basis.base]
+
+    def __str__(self):
+        if self.nicks:
+            letras = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+            ch = ''
+            for i in range(len(self.basis.base)):
+                if i == 0:
+                    ch = f'{self.vec_coefs[i]}|a> '
+                else:
+                    ch += f"+ {self.vec_coefs[i]}|{letras[i]}> "
+            return ch
+        else:
+            ch = ''
+            for i,k in enumerate(self.basis.base):
+                if i == 0:
+                    ch += f'{self.vec_coefs[i]}{k} '
+                else:
+                    ch += f"+ {self.vec_coefs[i]}{k} "
+            return ch
+
+    def get_Proyectors(self):
+        pass
+
+class Ticket(list):
+    def __init__(self, *args, tipos):
+        super().__init__(*args)
+        self.tipos = tipos
+    # ... (definir otros operadores como __sub__, __mul__, __div__, __eq__, etc.)
 
 ##########################################################################################
-caso = Atom('2p')
+
+configuracion = input('Configuración (separado por espacios p.e. "1s 2p"):\n ')
+caso = Atom(configuracion)
 
 base = caso.get_base(spin=True)
 base_kets = base.base
@@ -296,27 +316,25 @@ base_kets = base.base
 def Lsqr_exp(ket):
     c = ket.etiqueta[1]*(ket.etiqueta[1]+1)
     return c
-lcuad = Operator(np.array([0,0,0,0,0]), base, fun=Lsqr_exp)
+Lcuad = Operator(np.array([0,0,0,0,0]), base, fun=Lsqr_exp)
 
 def Lplus_exp(ket):
     c = np.sqrt(ket.etiqueta[1]*(ket.etiqueta[1]+1) - ket.etiqueta[2]*(ket.etiqueta[2]+1))
     return c
-lplus = Operator(np.array([0,0,1,0,0]), base, fun=Lplus_exp)
-
+Lplus = Operator(np.array([0,0,1,0,0]), base, fun=Lplus_exp)
 
 def Lminus_exp(ket):
     c = np.sqrt(ket.etiqueta[1]*(ket.etiqueta[1]+1) - ket.etiqueta[2]*(ket.etiqueta[2]-1))
     return c
-lminus = Operator(np.array([0,0,-1,0,0]), base, fun=Lminus_exp)
-
+Lminus = Operator(np.array([0,0,-1,0,0]), base, fun=Lminus_exp)
 
 def Lz_exp(ket):
     c = ket.etiqueta[2]
     return c
-lz = Operator(np.array([0,0,0,0,0]), base, fun=Lz_exp)
+Lz = Operator(np.array([0,0,0,0,0]), base, fun=Lz_exp)
 
-LxM = lplus.M/2 + lminus.M/2  
-LyM = 1j*lminus.M/2 - 1j*lplus.M/2
+LxM = Lplus.M/2 + Lminus.M/2  
+LyM = 1j*Lminus.M/2 - 1j*Lplus.M/2
 #otroL2 = np.dot(lz.M,lz.M) + np.dot(LxM,LxM) + np.dot(LyM,LyM)#SALEEEEEE!!!!
 ##########################################################################################
 
@@ -334,7 +352,6 @@ def Splus_exp(ket):
     except:
         print("XDDDD")
 Splus = Operator([0,0,0,0,1], base, fun=Splus_exp)
-
 def Sminus_exp(ket):
     try:
         c = np.sqrt(ket.etiqueta[3]*(ket.etiqueta[3]+1) - ket.etiqueta[4]*(ket.etiqueta[4]-1))
@@ -342,7 +359,6 @@ def Sminus_exp(ket):
     except:
         print("XDDDD")
 Sminus = Operator([0,0,0,0,-1], base, fun=Sminus_exp)
-
 def Sz_exp(ket):
     try:
         c = ket.etiqueta[4]
@@ -350,12 +366,15 @@ def Sz_exp(ket):
     except:
         print("XDDDD")
 Sz = Operator([0,0,0,0,0], base, fun=Sz_exp)
+
+SxM = Splus.M/2 + Sminus.M/2
+Sym = 1j*Sminus.M/2 -1j*Splus.M/2
 #######################################
 print(f"base:\n{base}")
-print(f"-----------\nL2:\n{lcuad.M}")
-print(f"-----------\nL-:\n{lminus.M}")
-print(f"-----------\nL+:\n{lplus.M}")
-print(f"-----------\nLz:\n{lz.M}")
+print(f"-----------\nL2:\n{Lcuad.M}")
+print(f"-----------\nL-:\n{Lminus.M}")
+print(f"-----------\nL+:\n{Lplus.M}")
+print(f"-----------\nLz:\n{Lz.M}")
 print(f"-----------\nS2:\n{Scuad.M}")
 print(f"-----------\nS-:\n{Sminus.M}")
 print(f"-----------\nS+:\n{Splus.M}")
@@ -368,4 +387,12 @@ miket = base_kets[4]
 miket.showing = [False,True,True,False,True]
 print(f"\nVamos a ver cómo actuan todos estos operadores sobre {miket}")
 
-print()
+L2miket = Lcuad*miket
+print(f"[L^2]: {miket} ]---->{L2miket}\n")
+Lminmiket = Lminus*miket
+print(f"[L-]: {miket} ]---->{Lminmiket}\n")
+
+Szmiket = Sz*miket
+print(f"[Sz]: {miket} ]---->{Szmiket}\n")
+Splusmiket = Splus*miket
+print(f"[S+]: {miket} ]---->{Splusmiket}\n")
