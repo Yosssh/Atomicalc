@@ -1,6 +1,7 @@
 import numpy as np
 import itertools
 import ajustes
+import ClebsGord as cg
 
 def TGI(n1,n2):
     numbers = [n1]
@@ -140,6 +141,7 @@ class OrtBass:
         self.base = [] #lista de kets de la base
         self.n = n
         self.spin = None
+        self.operadores = []
         if len(l) == 0:
             self.l = TGI(0,n[0]-1)
         else:
@@ -194,18 +196,29 @@ def Pauli_exclusion(ket):#esto es un ket de 10 numeros (los dos electrones)
         return False
 
 class Operator:
-    def __init__(self, transformation, base, M=None, fun=None):
+    def __init__(self, transformation, base=None, nom='',M=None, fun=None):
+        self.nom = nom
         self.t = transformation
         self.fun = fun
-        if M != None:
+        if isinstance(M, np.ndarray):
             self.M = M
         else:
             self.M = self.get_M(base)
+        
+    def __str__(self):
+        ch = self.nom+':\n'
+        ch += str(self.M)+"\n-------------------------"
+        return(ch)
 
 
     def __mul__(self, other):
         if isinstance(other, Ket):
             return Ket(other.etiqueta+self.t,np.dot(self.M, other.vec),showing=other.showing)
+        elif isinstance(other, State):
+            newstado = State(other.basis, np.dot(self.M, other.vec))
+            newstado.nicks = other.nicks
+            return newstado
+                
 
         else:
             print('Error en producto operador')
@@ -230,6 +243,14 @@ class Ket:
     def __init__(self, etiqueta, vec, showing=None):
         self.etiqueta = np.array(etiqueta)
         self.vec = vec
+        self.showing = None
+        self.num_tipos = None
+
+        if len(etiqueta)==5:
+            self.num_tipos = ['e','l','ml','l','ml']
+        else:
+            self.num_tipos = ['e','l','ml']
+
         if showing == None:
             self.showing = [True for _ in self.etiqueta]
         else:
@@ -269,13 +290,13 @@ class Ket:
 
 class State: #Creo que hay que darle una vuelta a esta o la clase Ket para unificarlas y reducir espacio (además de que por definicion un estado es un ket)
     def __init__(self, basis, coefs=None):
-        self.basis = basis
-        if coefs == None:
-            self.vec_coefs = np.ones(len(basis.base))/np.sqrt(len(basis.base))#Esto debería hacer que todos fueran equiprobables y con suma=1
-        else: 
-            self.vec_coefs = coefs
         self.nicks = False
-        self.Proyectors = [Operator((np.outer(ket.vec, ket.to_bra().vec))) for ket in self.basis.base]
+        self.basis = basis
+        self.provectors = []
+        if isinstance(coefs, np.ndarray):
+            self.vec = coefs
+        else: 
+            self.vec = np.ones(len(basis.base))/np.sqrt(len(basis.base))#Esto debería hacer que todos fueran equiprobables y con suma=1
 
     def __str__(self):
         if self.nicks:
@@ -283,60 +304,53 @@ class State: #Creo que hay que darle una vuelta a esta o la clase Ket para unifi
             ch = ''
             for i in range(len(self.basis.base)):
                 if i == 0:
-                    ch = f'{self.vec_coefs[i]}|a> '
+                    ch = f'{self.vec[i]:.2f}|a> '
                 else:
-                    ch += f"+ {self.vec_coefs[i]}|{letras[i]}> "
+                    ch += f"+ {self.vec[i]:.2f}|{letras[i]}> "
             return ch
         else:
             ch = ''
             for i,k in enumerate(self.basis.base):
                 if i == 0:
-                    ch += f'{self.vec_coefs[i]}{k} '
+                    ch += f'{self.vec[i]:.2f}{k} '
                 else:
-                    ch += f"+ {self.vec_coefs[i]}{k} "
+                    ch += f"+ {self.vec[i]:.2f}{k} "
             return ch
 
+    def set_showing(self, showing):
+        for k in self.basis.base:
+            k.showing = showing
+
+    def get_norm(self):
+        return np.sqrt(np.sum(self.vec**2))
+
     def get_Proyectors(self):
-        pass
+        for k in self.basis.base:
+            e = [0 for e in k.etiqueta]
+            self.provectors.append(Operator(e, self.basis,M=np.dot(k.vec,k.vec.T)))
+        
+    def update_state(self):
+        n_norm = self.get_norm()
+        self.vec *=n_norm
 
-class Ticket(list):
-    def __init__(self, *args, tipos):
-        super().__init__(*args)
-        self.tipos = tipos
-    # ... (definir otros operadores como __sub__, __mul__, __div__, __eq__, etc.)
+###################################################
+def ClebsGord(base):
+    n = False
+    return n
+###################################################
 
-##########################################################################################
-
-configuracion = input('Configuración (separado por espacios p.e. "1s 2p"):\n ')
-caso = Atom(configuracion)
-
-base = caso.get_base(spin=True)
-base_kets = base.base
-##########################################################################################
 def Lsqr_exp(ket):
     c = ket.etiqueta[1]*(ket.etiqueta[1]+1)
     return c
-Lcuad = Operator(np.array([0,0,0,0,0]), base, fun=Lsqr_exp)
-
 def Lplus_exp(ket):
     c = np.sqrt(ket.etiqueta[1]*(ket.etiqueta[1]+1) - ket.etiqueta[2]*(ket.etiqueta[2]+1))
     return c
-Lplus = Operator(np.array([0,0,1,0,0]), base, fun=Lplus_exp)
-
 def Lminus_exp(ket):
     c = np.sqrt(ket.etiqueta[1]*(ket.etiqueta[1]+1) - ket.etiqueta[2]*(ket.etiqueta[2]-1))
     return c
-Lminus = Operator(np.array([0,0,-1,0,0]), base, fun=Lminus_exp)
-
 def Lz_exp(ket):
     c = ket.etiqueta[2]
     return c
-Lz = Operator(np.array([0,0,0,0,0]), base, fun=Lz_exp)
-
-LxM = Lplus.M/2 + Lminus.M/2  
-LyM = 1j*Lminus.M/2 - 1j*Lplus.M/2
-#otroL2 = np.dot(lz.M,lz.M) + np.dot(LxM,LxM) + np.dot(LyM,LyM)#SALEEEEEE!!!!
-##########################################################################################
 
 def Ssqr_exp(ket):
     try:
@@ -344,55 +358,82 @@ def Ssqr_exp(ket):
         return c
     except:
         print("XDDDD")
-Scuad = Operator([0,0,0,0,0], base, fun=Ssqr_exp)
 def Splus_exp(ket):
     try:
         c = np.sqrt(ket.etiqueta[3]*(ket.etiqueta[3]+1) - ket.etiqueta[4]*(ket.etiqueta[4]+1))
         return c
     except:
         print("XDDDD")
-Splus = Operator([0,0,0,0,1], base, fun=Splus_exp)
 def Sminus_exp(ket):
     try:
         c = np.sqrt(ket.etiqueta[3]*(ket.etiqueta[3]+1) - ket.etiqueta[4]*(ket.etiqueta[4]-1))
         return c
     except:
         print("XDDDD")
-Sminus = Operator([0,0,0,0,-1], base, fun=Sminus_exp)
 def Sz_exp(ket):
     try:
         c = ket.etiqueta[4]
         return c
     except:
         print("XDDDD")
-Sz = Operator([0,0,0,0,0], base, fun=Sz_exp)
 
-SxM = Splus.M/2 + Sminus.M/2
-Sym = 1j*Sminus.M/2 -1j*Splus.M/2
-#######################################
-print(f"base:\n{base}")
-print(f"-----------\nL2:\n{Lcuad.M}")
-print(f"-----------\nL-:\n{Lminus.M}")
-print(f"-----------\nL+:\n{Lplus.M}")
-print(f"-----------\nLz:\n{Lz.M}")
-print(f"-----------\nS2:\n{Scuad.M}")
-print(f"-----------\nS-:\n{Sminus.M}")
-print(f"-----------\nS+:\n{Splus.M}")
-print(f"-----------\nSz:\n{Sz.M}")
-#######################################
+si_no = {
+    'y' : True,
+    'n' : False
+}
+##################################################################################
+##################################################################################
+############################COMIENZO CALCULADORA##################################
+##################################################################################
+##################################################################################
+configuracion = input('Configuración (separado por espacios p.e. "1s 2s"):\n ')
+spin = input('Spin?[y/n]:\n')
+caso = Atom(configuracion)
+base = caso.get_base(spin=si_no[spin])
+##################################################################################
+if base.spin:
+    Lcuad = Operator(np.array([0,0,0,0,0]), base=base, fun=Lsqr_exp, nom="L2")
+    Lplus = Operator(np.array([0,0,1,0,0]), base=base, fun=Lplus_exp, nom="L+")
+    Lminus = Operator(np.array([0,0,-1,0,0]), base=base, fun=Lminus_exp, nom="L-")
+    Lz = Operator(np.array([0,0,0,0,0]), base=base, fun=Lz_exp, nom="Lz")
+    LxM = Lplus.M/2 + Lminus.M/2  
+    LyM = 1j*Lminus.M/2 - 1j*Lplus.M/2
+    Lx = Operator(np.array([0,0,0,0,0]), M=LxM, nom="Lx")
+    Ly = Operator(np.array([0,0,0,0,0]), M=LyM, nom="Ly")
+    Scuad = Operator(np.array([0,0,0,0,0]), base=base, fun=Ssqr_exp, nom="S2")
+    Splus = Operator(np.array([0,0,0,0,1]), base=base, fun=Splus_exp, nom="S+")
+    Sminus = Operator(np.array([0,0,0,0,-1]), base=base, fun=Sminus_exp, nom="S-")
+    Sz = Operator(np.array([0,0,0,0,0]), base=base, fun=Sz_exp, nom="Sz")
+    SxM = Splus.M/2 + Sminus.M/2
+    SyM = 1j*Sminus.M/2 -1j*Splus.M/2
+    Sx = Operator(np.array([0,0,0,0,0]), M=SxM, nom="Sx")
+    Sy = Operator(np.array([0,0,0,0,0]), M=SyM, nom="Sy")
+    operadores = [Lcuad,Lplus,Lminus,Lz,Lx,Ly,Scuad,Splus,Sminus,Sz,Sx,Sy]
+else:
+    Lcuad = Operator(np.array([0,0,0]), base, fun=Lsqr_exp, nom="L2")
+    Lplus = Operator(np.array([0,0,1]), base, fun=Lplus_exp, nom="L+")
+    Lminus = Operator(np.array([0,0,-1]), base, fun=Lminus_exp, nom="L-")
+    Lz = Operator(np.array([0,0,0]), base, fun=Lz_exp, nom="Lz")
+    LxM = Lplus.M/2 + Lminus.M/2  
+    LyM = 1j*Lminus.M/2 - 1j*Lplus.M/2
+    Lx = Operator(np.array([0,0,0]), M=LxM, nom="Lx")
+    Ly = Operator(np.array([0,0,0]), M=LyM, nom="Ly")
+    operadores = [Lcuad,Lplus,Lminus,Lz, Lx, Ly]   
+
+##################################################################################
+print("---------BASE------------")
+for k in base.base:
+    print(k)
+print("-------------------------")
+print("--------OPERADORES-------")
+for o in operadores:
+    print(o)
+print("-------------------------")
 
 
 
-miket = base_kets[4]
-miket.showing = [False,True,True,False,True]
-print(f"\nVamos a ver cómo actuan todos estos operadores sobre {miket}")
+mistado = State(base)
+mistado.nicks = True
+print(f"K0 = {mistado}\n")
 
-L2miket = Lcuad*miket
-print(f"[L^2]: {miket} ]---->{L2miket}\n")
-Lminmiket = Lminus*miket
-print(f"[L-]: {miket} ]---->{Lminmiket}\n")
-
-Szmiket = Sz*miket
-print(f"[Sz]: {miket} ]---->{Szmiket}\n")
-Splusmiket = Splus*miket
-print(f"[S+]: {miket} ]---->{Splusmiket}\n")
+mistado.get_CG()
